@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.6
+- Improved `llms.txt` structure and readability (single H1, blockquote summary, H2-only sections)
+- Simplified language section headings and made labels consistent per language
+- Output is now ordered with the shop default language first
+
 ## 1.0.5
 - Fixed `llms.txt` output encoding (special characters now generated correctly)
 
