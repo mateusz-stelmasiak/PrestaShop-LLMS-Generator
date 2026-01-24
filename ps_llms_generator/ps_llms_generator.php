@@ -14,7 +14,7 @@ class Ps_Llms_Generator extends Module
     {
         $this->name = 'ps_llms_generator';
         $this->tab = 'seo';
-        $this->version = '1.0.5';
+        $this->version = '1.0.6';
         $this->author = 'ADLX';
         $this->need_instance = 0;
         $this->bootstrap = true;
@@ -407,78 +407,145 @@ if (Tools::isSubmit('submitPsLlmsGenerator')) {
 
     private function buildLlmsContent()
     {
-        $incCms = (int)Configuration::get(self::CFG_INC_CMS);
-        $incCats = (int)Configuration::get(self::CFG_INC_CATS);
-        $incProducts = (int)Configuration::get(self::CFG_INC_PRODUCTS);
+        $incCms = (int) Configuration::get(self::CFG_INC_CMS);
+        $incCats = (int) Configuration::get(self::CFG_INC_CATS);
+        $incProducts = (int) Configuration::get(self::CFG_INC_PRODUCTS);
 
         $excludedCms = $this->getExcludedCmsIds();
 
-        // The FILE must be in ALL shop languages (as requested)
+        // The FILE must be in ALL shop languages
         $languages = Language::getLanguages(true, $this->context->shop->id);
 
-        $out = [];
-        foreach ($languages as $lang) {
-            $id_lang = (int)$lang['id_lang'];
-            $iso = (string)$lang['iso_code'];
-            $langName = (string)$lang['name'];
-
-            $title = (string)Configuration::get(self::CFG_TITLE, $id_lang);
-            $desc = (string)Configuration::get(self::CFG_DESC, $id_lang);
-
-            $out[] = '## ' . $langName . ' (' . strtoupper($iso) . ')';
-            $out[] = '';
-            $out[] = '# ' . $this->sanitizeLine($title ?: $this->context->shop->name);
-            if (!empty($desc)) {
-                $out[] = $this->sanitizeParagraph($desc);
+        // Helpers
+        $displayLangName = static function ($name) {
+            $name = (string) $name;
+            // Remove trailing parenthetical: "Français (French)" -> "Français"
+            $name = preg_replace('/\s*\(.*\)\s*$/u', '', $name);
+            return trim($name);
+        };
+        $typeLabel = static function ($iso, $type) {
+            $iso = strtoupper((string) $iso);
+            $map = [
+                'EN' => [
+                    'home' => 'Home page',
+                    'cms' => 'CMS page',
+                    'cat' => 'Category',
+                    'product' => 'Product',
+                ],
+                'FR' => [
+                    'home' => 'Page d’accueil',
+                    'cms' => 'Page CMS',
+                    'cat' => 'Catégorie',
+                    'product' => 'Produit',
+                ],
+                'NL' => [
+                    'home' => 'Startpagina',
+                    'cms' => 'CMS-pagina',
+                    'cat' => 'Categorie',
+                    'product' => 'Product',
+                ],
+            ];
+            if (!isset($map[$iso])) {
+                $iso = 'EN';
             }
-            $out[] = '';
-            $out[] = '- ' . $this->mdLink('Home', $this->context->link->getPageLink('index', true, $id_lang));
+            return $map[$iso][$type] ?? $map[$iso]['product'];
+        };
+        $homeLabel = static function ($iso) {
+            $iso = strtoupper((string) $iso);
+            if ($iso === 'FR') {
+                return 'Accueil';
+            }
+            // NL/EN both acceptable as "Home"
+            return 'Home';
+        };
+
+        // Order: default shop language first, then the rest alphabetically
+        $idDefault = (int) Configuration::get('PS_LANG_DEFAULT');
+        usort($languages, static function ($a, $b) use ($idDefault) {
+            $aId = (int) ($a['id_lang'] ?? 0);
+            $bId = (int) ($b['id_lang'] ?? 0);
+            if ($aId === $idDefault && $bId !== $idDefault) {
+                return -1;
+            }
+            if ($bId === $idDefault && $aId !== $idDefault) {
+                return 1;
+            }
+            return strcasecmp((string)($a['name'] ?? ''), (string)($b['name'] ?? ''));
+        });
+
+        // Top-level title + quote block (single H1)
+        $topTitle = (string) Configuration::get(self::CFG_TITLE, $idDefault);
+        $topDesc = (string) Configuration::get(self::CFG_DESC, $idDefault);
+        $out = [];
+        $out[] = '# ' . $this->sanitizeLine($topTitle ?: $this->context->shop->name);
+        $out[] = '> ' . $this->sanitizeParagraph($topDesc ?: '');
+        $out[] = '';
+        $out[] = 'Sections below are grouped by language and content type.';
+        $out[] = '';
+
+        foreach ($languages as $lang) {
+            $id_lang = (int) $lang['id_lang'];
+            $iso = strtoupper((string) $lang['iso_code']);
+            $name = $displayLangName($lang['name'] ?? $iso);
+
+            // Main
+            $out[] = '## ' . $name . ' (' . $iso . ') — Main';
+            $out[] = '- ' . $this->mdLink($homeLabel($iso), $this->context->link->getPageLink('index', true, $id_lang)) . ': ' . $typeLabel($iso, 'home');
             $out[] = '';
 
+            // CMS
             if ($incCms) {
-                $out[] = '### CMS';
+                $out[] = '## ' . $name . ' (' . $iso . ') — CMS pages';
                 foreach ($this->getCmsIdsActive() as $cmsId) {
-                    if (in_array((int)$cmsId, $excludedCms, true)) {
+                    if (in_array((int) $cmsId, $excludedCms, true)) {
                         continue;
                     }
-                    $cms = new CMS((int)$cmsId, $id_lang, $this->context->shop->id);
+                    $cms = new CMS((int) $cmsId, $id_lang, $this->context->shop->id);
                     if (!Validate::isLoadedObject($cms)) {
                         continue;
                     }
-                    $out[] = '- ' . $this->mdLink($this->sanitizeLine($cms->meta_title ?: ('CMS #' . $cmsId)), $this->context->link->getCMSLink($cms, null, true, $id_lang));
+                    $out[] = '- ' . $this->mdLink(
+                        $this->sanitizeLine($cms->meta_title ?: ('CMS #' . $cmsId)),
+                        $this->context->link->getCMSLink($cms, null, true, $id_lang)
+                    ) . ': ' . $typeLabel($iso, 'cms');
                 }
                 $out[] = '';
             }
 
+            // Categories
             if ($incCats) {
-                $out[] = '### Categories';
+                $out[] = '## ' . $name . ' (' . $iso . ') — Categories';
                 foreach ($this->getAllCategoryIds() as $catId) {
-                    $cat = new Category((int)$catId, $id_lang, $this->context->shop->id);
+                    $cat = new Category((int) $catId, $id_lang, $this->context->shop->id);
                     if (!Validate::isLoadedObject($cat) || !$cat->active) {
                         continue;
                     }
-                    if ((int)$cat->id === (int)Configuration::get('PS_HOME_CATEGORY') || (int)$cat->id === 1) {
+                    if ((int) $cat->id === (int) Configuration::get('PS_HOME_CATEGORY') || (int) $cat->id === 1) {
                         continue;
                     }
-                    $out[] = '- ' . $this->mdLink($this->sanitizeLine($cat->name), $this->context->link->getCategoryLink($cat, null, $id_lang));
+                    $out[] = '- ' . $this->mdLink(
+                        $this->sanitizeLine($cat->name),
+                        $this->context->link->getCategoryLink($cat, null, $id_lang)
+                    ) . ': ' . $typeLabel($iso, 'cat');
                 }
                 $out[] = '';
             }
 
+            // Products
             if ($incProducts) {
-                $out[] = '### Products';
+                $out[] = '## ' . $name . ' (' . $iso . ') — Products';
                 foreach ($this->getAllActiveProductIds() as $pid) {
-                    $p = new Product((int)$pid, false, $id_lang, $this->context->shop->id);
+                    $p = new Product((int) $pid, false, $id_lang, $this->context->shop->id);
                     if (!Validate::isLoadedObject($p) || !$p->active) {
                         continue;
                     }
-                    $out[] = '- ' . $this->mdLink($this->sanitizeLine($p->name), $this->context->link->getProductLink($p, null, null, null, $id_lang));
+                    $out[] = '- ' . $this->mdLink(
+                        $this->sanitizeLine($p->name),
+                        $this->context->link->getProductLink($p, null, null, null, $id_lang)
+                    ) . ': ' . $typeLabel($iso, 'product');
                 }
                 $out[] = '';
             }
-
-            $out[] = '---';
-            $out[] = '';
         }
 
         return implode("\n", $out);
