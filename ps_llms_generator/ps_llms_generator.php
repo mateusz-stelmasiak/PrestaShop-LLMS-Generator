@@ -14,7 +14,7 @@ class Ps_Llms_Generator extends Module
     {
         $this->name = 'ps_llms_generator';
         $this->tab = 'seo';
-        $this->version = '1.0.4';
+        $this->version = '1.0.5';
         $this->author = 'ADLX';
         $this->need_instance = 0;
         $this->bootstrap = true;
@@ -389,6 +389,14 @@ if (Tools::isSubmit('submitPsLlmsGenerator')) {
     private function generateAndWriteLlms()
     {
         $content = $this->buildLlmsContent();
+
+        // Force UTF-8 detection in most clients/browsers (avoids mojibake like "â€”", "ðŸ…")
+        // Prepend a UTF-8 BOM once.
+        $bom = "\xEF\xBB\xBF";
+        if (strpos($content, $bom) !== 0) {
+            $content = $bom . $content;
+        }
+
         $path = _PS_ROOT_DIR_ . '/llms.txt';
         $ok = @file_put_contents($path, $content);
         if ($ok === false) {
