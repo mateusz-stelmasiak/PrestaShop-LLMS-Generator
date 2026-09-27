@@ -62,7 +62,7 @@ class Ps_Llms_Generator extends Module
 
         $this->displayName = 'PrestaShop LLMS Generator';
         $this->description = 'Generates /llms.txt so AI assistants can discover your CMS pages, categories and products.';
-        $this->ps_versions_compliancy = ['min' => '8.0.0', 'max' => '8.99.99'];
+        $this->ps_versions_compliancy = ['min' => '1.7.0', 'max' => '8.99.99'];
     }
 
     // -----------------------------------------------------------------
