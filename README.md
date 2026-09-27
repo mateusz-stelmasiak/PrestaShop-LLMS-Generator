@@ -1,3 +1,7 @@
+# WHY THE FORK?
+Wanted to use the module with prestashop 1.7, the dependencies seemed to match. SO far so goood. Will update if i run into trouble. 
+Checkout releases for a 1.7 compatible module ZIP.
+
 ![PrestaShop](https://img.shields.io/badge/PrestaShop-8.x-blue)
 ![License](https://img.shields.io/badge/License-MIT-green)
 ![Release](https://img.shields.io/github/v/release/iamadlx/PrestaShop-LLMS-Generator?label=Latest%20release)
